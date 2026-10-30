@@ -170,7 +170,8 @@ function matsTable(mats) {
     <td class="actions"><button class="btn xs" onclick="useMaterial('${m.id}')">Use for MCQs</button><button class="btn xs danger" onclick="delMaterial('${m.id}')">Delete</button></td></tr>`).join('')}</table></div>`;
 }
 function useMaterial(id) {
-  draft.material_id = id;
+  // A different material means a fresh start: never mix old questions with a new subject.
+  if (String(draft.material_id) !== String(id)) { draft = newDraft(); draft.material_id = id; }
   go('faculty/generate');
 }
 async function delMaterial(id) {
@@ -211,6 +212,11 @@ function doUpload(e) {
 // ----- generation -----
 function pickMaterial(sel) {
   const o = sel.options[sel.selectedIndex];
+  if (String(draft.material_id) !== String(sel.value)) {
+    // Switching material: drop the old questions so they cannot mix with the new subject.
+    draft.questions = []; draft.id = null; draft.title = ''; draft.mode = '';
+    renderReview();
+  }
   draft.material_id = sel.value;
   const f = sel.form;
   if (sel.value) { f.subject.value = o.dataset.subject || ''; f.topic.value = o.dataset.topic || ''; if (o.dataset.dept) draft.department_id = o.dataset.dept; }
@@ -226,7 +232,7 @@ async function doGenerate(e) {
     draft.questions = draft.questions.concat(r.questions);
     draft.mode = r.mode;
     if (!draft.title) draft.title = (f.topic || f.subject) + ' MCQs';
-    toast(r.questions.length + ' questions generated', 'ok');
+    toast(r.questions.length + ' questions generated' + (r.material_chars ? ' from your material (' + r.material_chars.toLocaleString() + ' characters read)' : ' from the topic only (no material selected)'), 'ok');
     renderReview();
     document.getElementById('review').scrollIntoView({ behavior: 'smooth' });
   } catch (x) {

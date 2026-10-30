@@ -252,7 +252,7 @@ app.post('/api/generate', staff, ah(async (req, res) => {
   if (!text && !topic && !subject) throw httpErr(400, 'Choose study material or enter a subject/topic.');
   const difficulty = ['Easy', 'Medium', 'Hard', 'Mixed'].includes(b.difficulty) ? b.difficulty : 'Mixed';
   const result = await generateMCQs({ text, topic, subject, count: b.count, difficulty, avoid: Array.isArray(b.avoid) ? b.avoid : [] });
-  res.json(result);
+  res.json({ ...result, material_chars: text.length });
 }));
 
 // ---------- faculty: question sets ----------
