@@ -13,7 +13,7 @@ let rf = { q: '', quiz_id: '', subject: '', department_id: '', sort: 'recent' };
 function newDraft() {
   return { id: null, title: '', subject: '', topic: '', department_id: me.department_id || '', material_id: '', questions: [], mode: '' };
 }
-const blankQ = () => ({ topic: '', question: '', options: ['', '', '', ''], correct_index: 0, explanation: '', difficulty: 'Medium' });
+const blankQ = () => ({ topic: '', question: '', options: ['', '', '', ''], correct_index: 0, explanation: '', difficulty: 'Medium', image: '', image_hint: '' });
 const toLocalInput = (d) => {
   d = new Date(d); const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -81,6 +81,7 @@ const FPAGES = {
       <label class="f"><span>Topic / chapter</span><input name="topic" value="${esc(draft.topic)}"></label></div>
       <div class="row"><label class="f"><span>Number of questions (1-30)</span><input name="count" type="number" min="1" max="30" value="10" required></label>
       <label class="f"><span>Difficulty</span><select name="difficulty"><option>Mixed</option><option>Easy</option><option selected>Medium</option><option>Hard</option></select></label></div>
+      <label class="chk"><input type="checkbox" name="append"> Add to the questions below (otherwise the old list is replaced)</label>
       <button class="btn" id="genbtn">✨ Generate MCQs Using AI</button>
       <div id="generr"></div></form></div>
     <div id="review"></div>`;
@@ -229,7 +230,8 @@ async function doGenerate(e) {
   err.innerHTML = ''; btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Generating… (can take up to a minute)';
   try {
     const r = await api('/generate', { method: 'POST', body: { material_id: f.material_id || null, subject: f.subject, topic: f.topic, count: +f.count, difficulty: f.difficulty } });
-    draft.questions = draft.questions.concat(r.questions);
+    draft.questions = f.append ? draft.questions.concat(r.questions) : r.questions;
+    if (!f.append) { draft.id = null; draft.title = ''; }
     draft.mode = r.mode;
     if (!draft.title) draft.title = (f.topic || f.subject) + ' MCQs';
     toast(r.questions.length + ' questions generated' + (r.material_chars ? ' from your material (' + r.material_chars.toLocaleString() + ' characters read)' : ' from the topic only (no material selected)'), 'ok');
@@ -258,9 +260,40 @@ function qCard(x, i) {
     <select style="width:auto;padding:4px 8px" onchange="draft.questions[${i}].difficulty=this.value">${['Easy', 'Medium', 'Hard'].map((d) => `<option ${x.difficulty === d ? 'selected' : ''}>${d}</option>`).join('')}</select><span class="grow"></span>
     <button class="btn xs ghost" onclick="regenQ(${i})" id="rg${i}">↻ Regenerate</button><button class="btn xs danger" onclick="delQ(${i})">Delete</button></div>
     <label class="f"><span>Question</span><textarea oninput="draft.questions[${i}].question=this.value">${esc(x.question)}</textarea></label>
+    <div style="margin-bottom:12px">${x.image
+      ? `<img class="qimg" src="${x.image}" alt="Question image"><button type="button" class="btn xs danger" onclick="draft.questions[${i}].image='';renderReview()">Remove image</button>`
+      : `${x.image_hint ? `<div class="notice">📷 This question may need a picture: <b>${esc(x.image_hint)}</b></div>` : ''}<label class="btn xs ghost" style="cursor:pointer">📷 Add image<input type="file" accept="image/*" hidden onchange="addQImage(${i},this)"></label>`}</div>
     <div style="color:var(--mut);font-size:.8rem;margin-bottom:6px">Select the radio button next to the correct answer.</div>
     ${x.options.map((o, j) => `<label class="opt"><input type="radio" name="c${i}" ${x.correct_index === j ? 'checked' : ''} onchange="draft.questions[${i}].correct_index=${j}"><b>${LETTERS[j]}</b><input type="text" value="${esc(o)}" oninput="draft.questions[${i}].options[${j}]=this.value"></label>`).join('')}
     <label class="f"><span>Explanation</span><textarea oninput="draft.questions[${i}].explanation=this.value">${esc(x.explanation)}</textarea></label></div>`;
+}
+// Shrinks a picture from the phone so it stays small enough to save.
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(jpeg|png|webp|gif|bmp)/.test(file.type)) return reject(new Error('Please choose a picture (JPG, PNG or WEBP).'));
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read this picture.')); };
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let max = 900;
+      for (let tries = 0; tries < 6; tries++) {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+        const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
+        const out = c.toDataURL('image/jpeg', 0.8);
+        if (out.length < 450000) return resolve(out);
+        max = Math.round(max * 0.75);
+      }
+      reject(new Error('This picture is too large. Please use a smaller one.'));
+    };
+    img.src = url;
+  });
+}
+async function addQImage(i, input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try { draft.questions[i].image = await compressImage(file); renderReview(); } catch (e) { fail(e); }
 }
 function delQ(i) { draft.questions.splice(i, 1); renderReview(); }
 async function regenQ(i) {
@@ -376,7 +409,7 @@ async function showDetail(id) {
     <div><small>Marks</small>${d.status === 'submitted' ? mark(d.score) + ' / ' + mark(d.total_marks) : 'Not submitted'}</div><div><small>Percentage</small>${pct(d.percentage)}</div>
     <div><small>Correct / Wrong / Unanswered</small>${d.correct ?? '—'} / ${d.incorrect ?? '—'} / ${d.unanswered ?? '—'}</div><div><small>Time taken</small>${dur(d.time_taken_sec)}</div>
     <div><small>Submitted</small>${fmt(d.submitted_at)}</div></div>
-    ${d.questions.map((x, i) => `<div class="qcard"><b>Q${i + 1}.</b> ${esc(x.question)}
+    ${d.questions.map((x, i) => `<div class="qcard"><b>Q${i + 1}.</b> ${esc(x.question)}${x.image ? `<img class="qimg" style="margin-top:10px" src="${x.image}" alt="">` : ''}
       <div style="margin:8px 0">${x.options.map((o, j) => `<div class="choice static ${j === x.correct_index ? 'right' : j === x.selected ? 'wrong' : ''}" style="padding:8px 12px;margin-bottom:6px"><b>${LETTERS[j]}</b><span>${esc(o)}${j === x.selected ? ' <em>(student)</em>' : ''}${j === x.correct_index ? ' ✓' : ''}</span></div>`).join('')}</div>
       <span class="tag ${x.selected == null ? 'gray' : x.is_correct ? 'ok' : 'bad'}">${x.selected == null ? 'Unanswered' : x.is_correct ? 'Correct' : 'Incorrect'}</span> Marks awarded: <b>${mark(x.marks_awarded)}</b></div>`).join('')}`);
   } catch (e) { fail(e); }

@@ -52,7 +52,7 @@ app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 const origins = (process.env.FRONTEND_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
 app.use(cors(origins.length ? { origin: origins } : {}));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '12mb' }));
 app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false }));
 
 // ---------- auth ----------
@@ -256,6 +256,13 @@ app.post('/api/generate', staff, ah(async (req, res) => {
 }));
 
 // ---------- faculty: question sets ----------
+function cleanImage(v) {
+  if (!v) return null;
+  v = String(v);
+  if (v.length > 600000) throw httpErr(400, 'An image is too large. Please use a smaller picture.');
+  if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(v)) throw httpErr(400, 'Images must be JPG, PNG or WEBP pictures.');
+  return v;
+}
 function cleanQ(x, i) {
   x = x || {};
   const question = String(x.question || '').trim();
@@ -271,6 +278,7 @@ function cleanQ(x, i) {
     explanation: String(x.explanation || '').trim().slice(0, 1000),
     topic: String(x.topic || '').trim().slice(0, 120),
     difficulty: ['Easy', 'Medium', 'Hard'].includes(x.difficulty) ? x.difficulty : 'Medium',
+    image: cleanImage(x.image),
   };
 }
 function cleanSet(b) {
@@ -293,8 +301,8 @@ async function insertQuestions(c, setId, qs) {
   for (let i = 0; i < qs.length; i++) {
     const x = qs[i];
     await c.query(
-      'insert into questions(set_id,position,topic,question,options,correct_index,explanation,difficulty) values($1,$2,$3,$4,$5,$6,$7,$8)',
-      [setId, i, x.topic, x.question, JSON.stringify(x.options), x.correct_index, x.explanation, x.difficulty]
+      'insert into questions(set_id,position,topic,question,options,correct_index,explanation,difficulty,image) values($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [setId, i, x.topic, x.question, JSON.stringify(x.options), x.correct_index, x.explanation, x.difficulty, x.image]
     );
   }
 }
@@ -337,7 +345,7 @@ app.get('/api/sets', staff, ah(async (req, res) => {
 app.get('/api/sets/:id', staff, ah(async (req, res) => {
   const s = (await q('select id,title,subject,topic,department_id,material_id from question_sets where id=$1 and ($2::uuid is null or faculty_id=$2)', [intOrNull(req.params.id), ownerId(req)]))[0];
   if (!s) throw httpErr(404, 'Question set not found.');
-  s.questions = await q('select id,topic,question,options,correct_index,explanation,difficulty from questions where set_id=$1 order by position', [s.id]);
+  s.questions = await q('select id,topic,question,options,correct_index,explanation,difficulty,image from questions where set_id=$1 order by position', [s.id]);
   res.json(s);
 }));
 app.delete('/api/sets/:id', staff, ah(async (req, res) => {
@@ -373,7 +381,7 @@ app.post('/api/quizzes', staff, ah(async (req, res) => {
   const { start, end } = parseWindow(b);
   const retakes = !!b.allow_retakes;
   const maxAttempts = retakes ? clampInt(b.max_attempts, 2, 20, 2) : 1;
-  const qs = await q('select question,options,correct_index,explanation from questions where set_id=$1 order by position', [set.id]);
+  const qs = await q('select question,options,correct_index,explanation,image from questions where set_id=$1 order by position', [set.id]);
   const n = clampInt(b.num_questions, 1, qs.length, qs.length);
   const quizId = await tx(async (c) => {
     const r = (await c.query(
@@ -382,8 +390,8 @@ app.post('/api/quizzes', staff, ah(async (req, res) => {
       [req.user.id, set.id, dept, title, String(b.subject || set.subject || '').slice(0, 120), String(b.topic || set.topic || '').slice(0, 200), marks, duration, start, end, b.show_review !== false, b.results_released !== false, retakes, maxAttempts]
     )).rows[0];
     for (let i = 0; i < n; i++) {
-      await c.query('insert into quiz_questions(quiz_id,position,question,options,correct_index,explanation) values($1,$2,$3,$4,$5,$6)',
-        [r.id, i, qs[i].question, JSON.stringify(qs[i].options), qs[i].correct_index, qs[i].explanation]);
+      await c.query('insert into quiz_questions(quiz_id,position,question,options,correct_index,explanation,image) values($1,$2,$3,$4,$5,$6,$7)',
+        [r.id, i, qs[i].question, JSON.stringify(qs[i].options), qs[i].correct_index, qs[i].explanation, qs[i].image]);
     }
     return r.id;
   });
@@ -546,7 +554,7 @@ app.post('/api/student/quizzes/:id/start', studentOnly, ah(async (req, res) => {
     a = (await q('insert into attempts(quiz_id,student_id,deadline_at) values($1,$2,$3) returning *', [z.id, req.user.id, deadline]))[0];
   }
   // Correct answers are deliberately NOT selected here.
-  const questions = await q('select id,question,options from quiz_questions where quiz_id=$1 order by position', [z.id]);
+  const questions = await q('select id,question,options,image from quiz_questions where quiz_id=$1 order by position', [z.id]);
   res.json({
     attempt_id: a.id, quiz_title: z.title, subject: z.subject,
     deadline_at: a.deadline_at, server_now: new Date().toISOString(),
@@ -594,10 +602,10 @@ app.get('/api/student/attempts/:id', studentOnly, ah(async (req, res) => {
     correct: a.correct, incorrect: a.incorrect, unanswered: a.unanswered, time_taken_sec: a.time_taken_sec, review: null,
   };
   if (z.show_review) {
-    const qs = await q('select id,question,options,correct_index,explanation from quiz_questions where quiz_id=$1 order by position', [a.quiz_id]);
+    const qs = await q('select id,question,options,correct_index,explanation,image from quiz_questions where quiz_id=$1 order by position', [a.quiz_id]);
     out.review = qs.map((x) => {
       const sel = a.answers[String(x.id)];
-      return { question: x.question, options: x.options, selected: sel === undefined ? null : sel, correct_index: x.correct_index, explanation: x.explanation, is_correct: sel === x.correct_index };
+      return { question: x.question, image: x.image, options: x.options, selected: sel === undefined ? null : sel, correct_index: x.correct_index, explanation: x.explanation, is_correct: sel === x.correct_index };
     });
   }
   res.json(out);
@@ -668,7 +676,7 @@ app.get('/api/faculty/results/:id', staff, ah(async (req, res) => {
     [intOrNull(req.params.id), ownerId(req)]
   ))[0];
   if (!a) throw httpErr(404, 'Result not found.');
-  const qs = await q('select id,question,options,correct_index from quiz_questions where quiz_id=$1 order by position', [a.quiz_id]);
+  const qs = await q('select id,question,options,correct_index,image from quiz_questions where quiz_id=$1 order by position', [a.quiz_id]);
   res.json({
     student_name: a.full_name, roll_number: a.roll_number, department: a.dept, quiz_title: a.title, subject: a.subject,
     status: a.status, score: num(a.score), total_marks: num(a.total_marks), percentage: num(a.percentage),
@@ -677,7 +685,7 @@ app.get('/api/faculty/results/:id', staff, ah(async (req, res) => {
     questions: qs.map((x) => {
       const sel = a.answers[String(x.id)];
       const ok = sel === x.correct_index;
-      return { question: x.question, options: x.options, selected: sel === undefined ? null : sel, correct_index: x.correct_index, is_correct: ok, marks_awarded: a.status === 'submitted' && ok ? a.mpq : 0 };
+      return { question: x.question, image: x.image, options: x.options, selected: sel === undefined ? null : sel, correct_index: x.correct_index, is_correct: ok, marks_awarded: a.status === 'submitted' && ok ? a.mpq : 0 };
     }),
   });
 }));
@@ -754,7 +762,7 @@ async function init() {
       console.log('Admin account created:', email);
     }
   }
-  app.listen(PORT, () => console.log(`NSITE AI MCQ Generator running on port ${PORT} (AI: ${isMock() ? 'demo/mock mode' : 'Gemini'})`));
+  app.listen(PORT, () => console.log(`QUIZORA AI running on port ${PORT} (AI: ${isMock() ? 'demo/mock mode' : 'Gemini'})`));
 }
 if (require.main === module) {
   init().catch((e) => {

@@ -1,4 +1,4 @@
-# NSITE AI MCQ Generator
+# QUIZORA AI
 
 Faculty upload study material (PDF / DOCX / TXT), AI writes MCQs, faculty review and publish them to a department, students take timed quizzes, and faculty see every student's marks and reports.
 

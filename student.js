@@ -90,7 +90,7 @@ function drawQuestion() {
   document.getElementById('qbody').innerHTML = `
     <div class="pal">${qs.questions.map((q, i) => `<button class="${qs.answers[q.id] !== undefined ? 'done' : ''} ${i === qs.idx ? 'cur' : ''}" onclick="qs.idx=${i};drawQuestion()">${i + 1}</button>`).join('')}</div>
     <div class="card"><div style="color:var(--mut);font-weight:700;margin-bottom:6px">Question ${qs.idx + 1} of ${n}</div>
-    <h3 style="font-size:1.15rem;margin-bottom:16px">${esc(x.question)}</h3>
+    <h3 style="font-size:1.15rem;margin-bottom:16px">${esc(x.question)}</h3>${x.image ? `<img class="qimg" src="${x.image}" alt="Question picture">` : ''}
     ${x.options.map((o, j) => `<button class="choice ${qs.answers[x.id] === j ? 'sel' : ''}" onclick="pick('${x.id}',${j})"><b>${LETTERS[j]}</b><span>${esc(o)}</span></button>`).join('')}
     <div class="actions" style="justify-content:space-between;margin-top:14px"><button class="btn alt sm" ${qs.idx === 0 ? 'disabled' : ''} onclick="qs.idx--;drawQuestion()">← Previous</button>
     ${qs.idx < n - 1 ? '<button class="btn sm" onclick="qs.idx++;drawQuestion()">Next →</button>' : '<button class="btn sm" onclick="submitQuiz(false)">Submit Quiz</button>'}</div></div>`;
@@ -130,7 +130,7 @@ async function renderResult(id) {
       body = `<div class="grid" style="margin-bottom:18px"><div class="stat"><div class="bigscore">${mark(d.score)} <small style="font-size:1.1rem;color:var(--mut)">/ ${mark(d.total_marks)}</small></div><span>Marks obtained</span></div>
         <div class="stat"><b>${pct(d.percentage)}</b><span>Percentage</span></div><div class="stat"><b style="color:var(--ok)">${d.correct}</b><span>Correct</span></div>
         <div class="stat"><b style="color:var(--bad)">${d.incorrect}</b><span>Incorrect</span></div><div class="stat"><b>${d.unanswered}</b><span>Unanswered</span></div><div class="stat"><b>${dur(d.time_taken_sec)}</b><span>Time taken</span></div></div>`;
-      if (d.review) body += '<h3>Answer review</h3>' + d.review.map((x, i) => `<div class="qcard"><b>Q${i + 1}.</b> ${esc(x.question)}<div style="margin:10px 0">${x.options.map((o, j) => `<div class="choice static ${j === x.correct_index ? 'right' : j === x.selected ? 'wrong' : ''}" style="padding:9px 12px;margin-bottom:6px"><b>${LETTERS[j]}</b><span>${esc(o)}${j === x.selected ? ' <em>(your answer)</em>' : ''}${j === x.correct_index ? ' ✓' : ''}</span></div>`).join('')}</div>
+      if (d.review) body += '<h3>Answer review</h3>' + d.review.map((x, i) => `<div class="qcard"><b>Q${i + 1}.</b> ${esc(x.question)}${x.image ? `<img class="qimg" style="margin-top:10px" src="${x.image}" alt="">` : ''}<div style="margin:10px 0">${x.options.map((o, j) => `<div class="choice static ${j === x.correct_index ? 'right' : j === x.selected ? 'wrong' : ''}" style="padding:9px 12px;margin-bottom:6px"><b>${LETTERS[j]}</b><span>${esc(o)}${j === x.selected ? ' <em>(your answer)</em>' : ''}${j === x.correct_index ? ' ✓' : ''}</span></div>`).join('')}</div>
         ${x.selected == null ? '<span class="tag gray">Unanswered</span>' : x.is_correct ? '<span class="tag ok">Correct</span>' : '<span class="tag bad">Incorrect</span>'}${x.explanation ? `<p style="color:var(--mut);margin:8px 0 0"><b>Explanation:</b> ${esc(x.explanation)}</p>` : ''}</div>`).join('');
       else body += '<div class="notice">Answer review is not enabled for this quiz.</div>';
     }

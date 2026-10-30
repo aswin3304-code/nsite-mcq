@@ -1,7 +1,7 @@
 {
-  "name": "nsite-ai-mcq-generator",
+  "name": "quizora-ai",
   "version": "1.0.0",
-  "description": "NSITE AI MCQ Generator - backend and web app",
+  "description": "QUIZORA AI - backend and web app",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

@@ -70,10 +70,9 @@ function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
 function go(path) { if (location.hash === '#/' + path) route(); else location.hash = '#/' + path; }
 
 function navbar() {
-  const dash = me ? `<a href="#/${me.role === 'student' ? 'student/available' : 'faculty/overview'}">Dashboard</a><a href="#" onclick="logout();return false">Logout</a>` : '<a class="btn sm" href="#/login">Login</a>';
-  return `<header class="nav no-print"><a class="brand" href="#/"><span class="logo">AI</span><span>NSITE <b>AI MCQ</b> Generator</span></a>
-    <button class="burger" aria-label="Menu" onclick="document.body.classList.toggle('menu')">☰</button>
-    <nav><a href="#/">Home</a><a href="#/about">About</a><a href="#/features">Features</a>${dash}</nav></header>`;
+  const links = me ? `<a href="#/${me.role === 'student' ? 'student/available' : 'faculty/overview'}">Dashboard</a><a href="#" onclick="logout();return false">Logout</a>` : '';
+  return `<header class="nav no-print"><a class="brand" href="#/"><span class="logo">Q</span><span>QUIZORA <b>AI</b></span></a>
+    ${me ? `<button class="burger" aria-label="Menu" onclick="document.body.classList.toggle('menu')">☰</button><nav>${links}</nav>` : ''}</header>`;
 }
 function shell(inner) {
   document.body.classList.remove('menu');
@@ -86,7 +85,7 @@ async function route() {
   clearInterval(quizTimer);
   const [, a, b, c] = location.hash.split('/');
   try {
-    if (!a || a === 'about' || a === 'features') return renderHome(a);
+    if (!a || a === 'about' || a === 'features') return renderHome();
     if (a === 'login') return renderAuth(b, c);
     if (a === 'faculty') {
       if (!me || me.role === 'student') return go('login/faculty');
@@ -102,42 +101,24 @@ async function route() {
   } catch (e) { fail(e); }
 }
 
-// ---------- home ----------
-function renderHome(section) {
+// ---------- home: only the two logins ----------
+function renderHome() {
   shell(`
-  <section class="hero">
-    <span class="pill">🎓 Built for colleges</span>
-    <h1>NSITE <span>AI MCQ Generator</span></h1>
+  <section class="hero only">
+    <h1>QUIZORA <span>AI</span></h1>
     <p>Smart AI-powered question generation and assessment for students and faculty.</p>
     <div class="cta">
       <a class="btn big" href="#/login/student">🧑‍🎓 Student Login</a>
       <a class="btn big alt" href="#/login/faculty">👩‍🏫 Faculty Login</a>
     </div>
-  </section>
-  <section class="section" id="about">
-    <h2>About</h2>
-    <p class="lead">Faculty upload their study material, the AI drafts multiple-choice questions, and the quiz is published to students of the chosen department. Marks are calculated securely on the server and results are available instantly.</p>
-  </section>
-  <section class="section" id="features">
-    <h2>Features</h2>
-    <p class="lead">Everything from material upload to performance reports in one place.</p>
-    <div class="grid">
-      ${[['📄', 'Upload PDF, DOCX or TXT', 'Questions are generated from your own study material.'], ['✨', 'AI-generated MCQs', 'Four options, a correct answer, explanation and difficulty for every question.'], ['✏️', 'Review and edit', 'Edit, delete, add or regenerate any question before publishing.'], ['🏫', 'Department-based quizzes', 'Only students of the selected department can open a quiz.'], ['⏱️', 'Timed quizzes', 'Countdown timer with automatic submission when time ends.'], ['🔒', 'Secure marking', 'Correct answers never leave the server before submission.'], ['📊', 'Marks and analytics', 'Student-wise reports, quiz-wise performance, CSV export and printing.'], ['📱', 'Works on every device', 'Phones, tablets and computers.']]
-        .map(([i, t, d]) => `<div class="card feat"><div class="ico">${i}</div><h3>${t}</h3><p style="color:var(--mut);margin:0">${d}</p></div>`).join('')}
-    </div>
-  </section>
-  <footer>© NSITE AI MCQ Generator</footer>`);
-  if (section) setTimeout(() => { const el = document.getElementById(section); if (el) el.scrollIntoView({ behavior: 'smooth' }); else window.scrollTo(0, 0); }, 30);
-  else window.scrollTo(0, 0);
+  </section>`);
+  window.scrollTo(0, 0);
 }
 
 // ---------- login / register ----------
 let authMode = 'login';
 async function renderAuth(role, mode) {
-  if (role !== 'student' && role !== 'faculty') {
-    return shell(`<div class="authwrap"><div class="card"><h2>Choose how to continue</h2><div class="cta" style="flex-direction:column;margin-top:16px">
-      <a class="btn big" href="#/login/student">🧑‍🎓 Student Login</a><a class="btn big alt" href="#/login/faculty">👩‍🏫 Faculty Login</a></div></div></div>`);
-  }
+  if (role !== 'student' && role !== 'faculty') return renderHome();
   if (mode) authMode = mode;
   await loadDepts().catch(fail);
   const reg = authMode === 'register';
@@ -153,7 +134,7 @@ async function renderAuth(role, mode) {
       <label class="f"><span>Password${reg ? ' (at least 8 characters)' : ''}</span><input name="password" type="password" required minlength="${reg ? 8 : 1}" autocomplete="${reg ? 'new-password' : 'current-password'}"></label>
       <button class="btn" style="width:100%" id="authbtn">${reg ? 'Create account' : 'Login'}</button>
     </form>
-    ${role === 'faculty' ? '<p style="color:var(--mut);font-size:.85rem;margin-bottom:0">Administrators also log in here.</p>' : ''}
+    <p style="text-align:center;margin:14px 0 0"><a href="#/">← Back</a></p>
   </div></div>`);
 }
 async function doAuth(e, role) {

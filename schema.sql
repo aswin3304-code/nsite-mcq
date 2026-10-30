@@ -85,6 +85,9 @@ create table if not exists quiz_questions (
   explanation text
 );
 
+alter table questions add column if not exists image text;
+alter table quiz_questions add column if not exists image text;
+
 create table if not exists attempts (
   id bigserial primary key,
   quiz_id bigint not null references quizzes(id) on delete cascade,
