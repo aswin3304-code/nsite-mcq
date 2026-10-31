@@ -25,7 +25,7 @@ You do **not** need to create tables. The server creates them automatically.
 
 ### Step 3: Put the code on GitHub
 1. Create a free account at github.com, tap **New repository**, name it `nsite-mcq`, create it.
-2. Unzip this project on your phone. In the repository tap **Add file → Upload files**, select **all the files** from the unzipped folder (`server.js`, `ai.js`, `schema.sql`, `package.json`, `index.html`, `style.css`, `config.js`, `app.js`, `faculty.js`, `student.js`) and tap **Commit changes**.
+2. Unzip this project on your phone. In the repository tap **Add file → Upload files**, select **all the files** from the unzipped folder (`server.js`, `schema.sql`, `package.json`, `index.html`, `style.css`, `config.js`, `app.js`, `faculty.js`, `student.js`) and tap **Commit changes**.
    Do **not** upload any `.env` file with real passwords.
 
 ### Step 4: Run it on Render (free)
