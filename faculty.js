@@ -38,12 +38,20 @@ async function renderFaculty(sec) {
   }
 }
 
+async function aiBanner() {
+  try {
+    const h = await api('/health');
+    if (h.ai === 'mock') return '<div class="notice err">⚠️ The AI is in <b>DEMO mode</b> (AI_MODE is set to mock on Render), so you only get simple practice questions. Set <b>AI_MODE = gemini</b> and add <b>GEMINI_API_KEY</b> to use the real AI.</div>';
+    if (h.ai === 'missing-key') return '<div class="notice err">⚠️ The AI key is missing. Add <b>GEMINI_API_KEY</b> in the Render Environment settings.</div>';
+  } catch (e) { /* ignore */ }
+  return '';
+}
 const banner = () => `<div class="welcome"><h2>Welcome, ${esc(me.full_name)}!</h2><p>${esc(me.department_name || 'Administrator')}${me.role === 'admin' ? ' · Administrator' : ''}</p></div>`;
 
 const FPAGES = {
   async overview() {
-    const s = await api('/faculty/stats');
-    return `${banner()}<div class="grid" style="margin-bottom:20px">
+    const [s, warn] = await Promise.all([api('/faculty/stats'), aiBanner()]);
+    return `${banner()}${warn}<div class="grid" style="margin-bottom:20px">
       <div class="stat"><b>${s.total_sets}</b><span>Total question sets</span></div>
       <div class="stat"><b>${s.total_published}</b><span>Published quizzes</span></div>
       <div class="stat"><b>${s.total_students}</b><span>Students who attempted</span></div>
@@ -71,9 +79,10 @@ const FPAGES = {
   // ----- generate + review -----
   async generate() {
     const mats = await api('/materials');
+    const warn = await aiBanner();
     const cur = mats.find((m) => String(m.id) === String(draft.material_id));
     if (cur) { if (!draft.subject) draft.subject = cur.subject || ''; if (!draft.topic) draft.topic = cur.topic || ''; }
-    return `<h2>Generate MCQs</h2>
+    return `<h2>Generate MCQs</h2>${warn}
     <div class="card" style="margin-bottom:20px"><form onsubmit="doGenerate(event)">
       <label class="f"><span>Study material</span><select name="material_id" onchange="pickMaterial(this)"><option value="">None - use subject/topic only</option>
         ${mats.map((m) => `<option value="${m.id}" data-subject="${esc(m.subject)}" data-topic="${esc(m.topic)}" data-dept="${m.department_id || ''}" ${String(draft.material_id) === String(m.id) ? 'selected' : ''}>${esc(m.filename || m.topic || 'Topic only')} - ${esc(m.subject)}</option>`).join('')}</select></label>
@@ -248,6 +257,7 @@ function renderReview() {
   const qs = draft.questions;
   el.innerHTML = `<h3>Review and edit questions ${qs.length ? `(${qs.length})` : ''}</h3>
   ${draft.mode === 'mock' ? '<div class="notice">⚠️ Demo mode: the AI key is not set, so these are simple practice questions, not real AI output. Add GEMINI_API_KEY on the server for real AI.</div>' : ''}
+  ${qs.some((x) => x.image_hint && !x.image) ? '<div class="actions" style="margin-bottom:14px"><button class="btn" id="aiall" onclick="aiImagesForAll()">🎨 Create images for all questions that need one</button></div>' : ''}
   ${qs.length ? qs.map(qCard).join('') : '<div class="empty">No questions yet. Generate with AI above, or add one manually.</div>'}
   <div class="actions" style="margin-bottom:18px"><button class="btn alt sm" onclick="draft.questions.push(blankQ());renderReview()">➕ Add question manually</button></div>
   ${qs.length ? `<div class="card"><h3>Save question set</h3><div class="row">
@@ -262,7 +272,7 @@ function qCard(x, i) {
     <label class="f"><span>Question</span><textarea oninput="draft.questions[${i}].question=this.value">${esc(x.question)}</textarea></label>
     <div style="margin-bottom:12px">${x.image
       ? `<img class="qimg" src="${x.image}" alt="Question image"><button type="button" class="btn xs danger" onclick="draft.questions[${i}].image='';renderReview()">Remove image</button>`
-      : `${x.image_hint ? `<div class="notice">📷 This question may need a picture: <b>${esc(x.image_hint)}</b></div>` : ''}<label class="btn xs ghost" style="cursor:pointer">📷 Add image<input type="file" accept="image/*" hidden onchange="addQImage(${i},this)"></label>`}</div>
+      : `${x.image_hint ? `<div class="notice">📷 This question may need a picture: <b>${esc(x.image_hint)}</b></div>` : ''}<div class="actions"><button type="button" class="btn xs" id="ai${i}" onclick="aiImage(${i})">🎨 Create image with AI</button><label class="btn xs ghost" style="cursor:pointer">📷 Upload my own<input type="file" accept="image/*" hidden onchange="addQImage(${i},this)"></label></div>`}</div>
     <div style="color:var(--mut);font-size:.8rem;margin-bottom:6px">Select the radio button next to the correct answer.</div>
     ${x.options.map((o, j) => `<label class="opt"><input type="radio" name="c${i}" ${x.correct_index === j ? 'checked' : ''} onchange="draft.questions[${i}].correct_index=${j}"><b>${LETTERS[j]}</b><input type="text" value="${esc(o)}" oninput="draft.questions[${i}].options[${j}]=this.value"></label>`).join('')}
     <label class="f"><span>Explanation</span><textarea oninput="draft.questions[${i}].explanation=this.value">${esc(x.explanation)}</textarea></label></div>`;
@@ -294,6 +304,33 @@ async function addQImage(i, input) {
   const file = input.files && input.files[0];
   if (!file) return;
   try { draft.questions[i].image = await compressImage(file); renderReview(); } catch (e) { fail(e); }
+}
+async function aiImage(i, quiet) {
+  const x = draft.questions[i], btn = document.getElementById('ai' + i);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Drawing…'; }
+  try {
+    const r = await api('/generate-image', { method: 'POST', body: { question: x.question, hint: x.image_hint, subject: draft.subject } });
+    x.image = r.image;
+    if (!quiet) renderReview();
+    return true;
+  } catch (e) {
+    if (!quiet) fail(e);
+    if (btn) { btn.disabled = false; btn.textContent = '🎨 Create image with AI'; }
+    return e;
+  }
+}
+async function aiImagesForAll() {
+  const todo = draft.questions.map((x, i) => i).filter((i) => !draft.questions[i].image && draft.questions[i].image_hint);
+  const b = document.getElementById('aiall');
+  let done = 0;
+  for (const i of todo) {
+    if (b) b.innerHTML = `<span class="spin"></span> Drawing ${done + 1} of ${todo.length}…`;
+    const r = await aiImage(i, true);
+    if (r !== true) { toast(r.message || 'Could not draw all pictures.', 'err'); break; }
+    done++;
+  }
+  renderReview();
+  if (done) toast(done + ' picture(s) created. Please check them.', 'ok');
 }
 function delQ(i) { draft.questions.splice(i, 1); renderReview(); }
 async function regenQ(i) {

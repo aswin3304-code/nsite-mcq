@@ -11,7 +11,7 @@ const multer = require('multer');
 const { Pool } = require('pg');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
-const { generateMCQs, isMock } = require('./ai');
+const { generateMCQs, generateDiagram, aiStatus } = require('./ai');
 
 const PORT = process.env.PORT || 3000;
 const PASS_MARK = 40; // percent, used only in analytics
@@ -86,7 +86,7 @@ function auth(...roles) {
 const staff = auth('faculty', 'admin');
 const ownerId = (req) => (req.user.role === 'admin' ? null : req.user.id); // null = admin sees everything
 
-app.get('/api/health', (req, res) => res.json({ ok: true, ai: isMock() ? 'mock' : 'gemini' }));
+app.get('/api/health', (req, res) => res.json({ ok: true, ai: aiStatus() }));
 app.get('/api/departments', ah(async (req, res) => res.json(await q('select id,name from departments order by id'))));
 
 app.post('/api/auth/register', ah(async (req, res) => {
@@ -255,12 +255,20 @@ app.post('/api/generate', staff, ah(async (req, res) => {
   res.json({ ...result, material_chars: text.length });
 }));
 
+app.post('/api/generate-image', staff, ah(async (req, res) => {
+  const b = req.body || {};
+  const question = String(b.question || '').trim().slice(0, 1000);
+  const hint = String(b.hint || '').trim().slice(0, 300);
+  if (!question && !hint) throw httpErr(400, 'Write the question first.');
+  res.json({ image: await generateDiagram({ question, hint, subject: String(b.subject || '').slice(0, 120) }) });
+}));
+
 // ---------- faculty: question sets ----------
 function cleanImage(v) {
   if (!v) return null;
   v = String(v);
   if (v.length > 600000) throw httpErr(400, 'An image is too large. Please use a smaller picture.');
-  if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(v)) throw httpErr(400, 'Images must be JPG, PNG or WEBP pictures.');
+  if (!/^data:image\/(jpeg|png|webp|svg\+xml);base64,[A-Za-z0-9+\/=]+$/.test(v)) throw httpErr(400, 'Images must be JPG, PNG, WEBP or AI-made pictures.');
   return v;
 }
 function cleanQ(x, i) {
@@ -762,7 +770,7 @@ async function init() {
       console.log('Admin account created:', email);
     }
   }
-  app.listen(PORT, () => console.log(`QUIZORA AI running on port ${PORT} (AI: ${isMock() ? 'demo/mock mode' : 'Gemini'})`));
+  app.listen(PORT, () => console.log(`QUIZORA AI running on port ${PORT} (AI: ${aiStatus()})`));
 }
 if (require.main === module) {
   init().catch((e) => {
