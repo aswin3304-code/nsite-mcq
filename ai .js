@@ -1,6 +1,25 @@
+Claude
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Ai · JS
 // AI question generation: real Gemini API (free tier) or a built-in demo mode.
 const mkErr = (message, status) => Object.assign(new Error(message), { status: status || 502 });
-
+ 
 // Google retires and renames models, so ask Google which ones this key can use and try the newest first.
 let modelCache = null, modelCacheAt = 0;
 async function discoverModels() {
@@ -24,7 +43,7 @@ async function discoverModels() {
     return [];
   }
 }
-
+ 
 async function callGemini(body) {
   const discovered = await discoverModels();
   const models = [...new Set([(process.env.GEMINI_MODEL || '').trim(), ...discovered.slice(0, 5), 'gemini-flash-latest', 'gemini-2.5-flash'].filter(Boolean))].slice(0, 7);
@@ -55,7 +74,7 @@ async function callGemini(body) {
   }
   throw last;
 }
-
+ 
 function shuffle(a) {
   a = a.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -64,7 +83,7 @@ function shuffle(a) {
   }
   return a;
 }
-
+ 
 function isMock() {
   return (process.env.AI_MODE || '').toLowerCase() === 'mock';
 }
@@ -73,7 +92,7 @@ function aiStatus() {
   return isMock() ? 'mock' : process.env.GEMINI_API_KEY ? 'gemini' : 'missing-key';
 }
 const NO_KEY = 'The AI is not set up yet. The administrator must add GEMINI_API_KEY (and AI_MODE=gemini) in the Render Environment settings.';
-
+ 
 // Put the correct answer at a random spot, evenly spread over A-D, so the answers never follow a pattern.
 function balanceAnswers(list) {
   const pos = [];
@@ -87,7 +106,7 @@ function balanceAnswers(list) {
   });
   return list;
 }
-
+ 
 function cleanGenerated(list, topic, difficulty) {
   const out = [];
   for (const x of Array.isArray(list) ? list : []) {
@@ -121,7 +140,7 @@ function cleanGenerated(list, topic, difficulty) {
   }
   return out;
 }
-
+ 
 const BANK = [
   ['Electrochemistry', 'What is the main purpose of a salt bridge in an electrochemical cell?', ['To increase the temperature', 'To maintain electrical neutrality', 'To stop the chemical reaction', 'To produce electrons'], 1, 'The salt bridge lets ions move between the half-cells and keeps each solution electrically neutral.', 'Easy'],
   ['Electrochemistry', 'At which electrode does oxidation take place in a galvanic cell?', ['Cathode', 'Anode', 'Salt bridge', 'Voltmeter'], 1, 'Oxidation (loss of electrons) always occurs at the anode.', 'Easy'],
@@ -130,7 +149,7 @@ const BANK = [
   ['Thermal Analysis', 'What does thermogravimetric analysis (TGA) measure?', ['Change in mass with temperature', 'Change in colour with temperature', 'Change in pressure with time', 'Change in volume with pH'], 0, 'TGA records the sample mass as it is heated at a controlled rate.', 'Medium'],
   ['Polymers', 'The process of joining many small monomer molecules to form a polymer is called:', ['Distillation', 'Polymerisation', 'Sublimation', 'Electrolysis'], 1, 'Polymerisation links monomers into long chains.', 'Easy'],
 ];
-
+ 
 // Demo mode: builds simple fill-in-the-blank questions from the material (or uses a small sample bank).
 function mockGenerate({ text, topic, count, difficulty }) {
   const out = [];
@@ -163,7 +182,7 @@ function mockGenerate({ text, topic, count, difficulty }) {
   }
   return out.slice(0, count);
 }
-
+ 
 async function generateMCQs({ text, topic, subject, count, difficulty, avoid }) {
   count = Math.max(1, Math.min(30, parseInt(count) || 10));
   if (isMock()) {
@@ -187,7 +206,7 @@ async function generateMCQs({ text, topic, subject, count, difficulty, avoid }) 
     'Return ONLY a JSON array. Each item: {"topic": string, "question": string, "options": [4 strings], "correct_index": 0-3, "explanation": string, "difficulty": "Easy"|"Medium"|"Hard", "image_hint": string}.',
     material ? `\n=== STUDY MATERIAL START ===\n${material}\n=== STUDY MATERIAL END ===` : '',
   ].filter(Boolean).join('\n');
-
+ 
   const data = await callGemini({
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { temperature: 0.5, responseMimeType: 'application/json' },
@@ -210,7 +229,7 @@ async function generateMCQs({ text, topic, subject, count, difficulty, avoid }) 
   }
   return { mode: 'gemini', questions: balanceAnswers(questions.slice(0, count)) };
 }
-
+ 
 // Turns the AI's SVG drawing into a safe picture. Pictures are shown only through <img>, where scripts never run.
 function cleanSvg(raw) {
   const m = String(raw || '').match(/<svg[\s\S]*<\/svg>/i);
@@ -221,7 +240,7 @@ function cleanSvg(raw) {
   if (!/xmlns\s*=/.test(svg)) svg = svg.replace(/<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
   return 'data:image/svg+xml;base64,' + Buffer.from(svg, 'utf8').toString('base64');
 }
-
+ 
 // AI draws a labelled diagram (circuit, apparatus, graph, structure...) as SVG. The correct answer is never sent, so it cannot be shown.
 async function generateDiagram({ question, hint, subject }) {
   if (isMock() || !process.env.GEMINI_API_KEY) throw mkErr('AI pictures need the real AI. Set AI_MODE=gemini and add GEMINI_API_KEY on the server.', 400);
@@ -244,5 +263,7 @@ async function generateDiagram({ question, hint, subject }) {
   }
   return out;
 }
-
+ 
 module.exports = { generateMCQs, generateDiagram, cleanSvg, isMock, aiStatus, balanceAnswers, mockGenerate, cleanGenerated };
+ 
+Claude finished the response
