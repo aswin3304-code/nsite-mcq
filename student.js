@@ -106,6 +106,7 @@ async function submitQuiz(auto) {
   if (!qs || qs.submitting) return;
   const n = qs.questions.length, answered = Object.keys(qs.answers).length;
   if (!auto && !confirm(`Submit your quiz now?\n\nAnswered: ${answered} of ${n}` + (answered < n ? `\nUnanswered: ${n - answered}` : '') + '\n\nYou cannot change answers after submitting.')) return;
+  unlockSound(); // a tap is needed before browsers allow sound
   qs.submitting = true; clearTimeout(qs.saveT);
   const id = qs.attempt;
   try {
@@ -135,7 +136,60 @@ async function renderResult(id) {
       else body += '<div class="notice">Answer review is not enabled for this quiz.</div>';
     }
     shell(`<div class="qpage"><div class="card" style="margin-bottom:16px"><h2>Quiz result</h2>${head}</div>${body}<div class="actions no-print" style="margin:16px 0"><a class="btn" href="#/student/completed">Back to dashboard</a><button class="btn alt" onclick="window.print()">🖨️ Print</button></div></div>`);
+    if (d.released && d.percentage > CELEBRATE_AT) celebrate(d, id);
   } catch (e) {
     shell(`<div class="qpage"><div class="notice err">${esc(e.message)}</div><a class="btn" href="#/student/completed">Back to dashboard</a></div>`);
   }
+}
+
+// ----- congratulations popup (above 80%) -----
+const CELEBRATE_AT = 80; // popup + music only when the percentage is MORE than this
+let sndCtx = null;
+function unlockSound() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    if (!sndCtx) sndCtx = new AC();
+    if (sndCtx.state === 'suspended') sndCtx.resume();
+  } catch (e) { /* sound is optional */ }
+}
+function celebMusic() {
+  try {
+    unlockSound(); const ctx = sndCtx; if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    const t0 = ctx.currentTime + 0.05;
+    // C E G C(high) then a held chord: a short happy fanfare
+    const notes = [[523.25, 0], [659.25, 0.16], [783.99, 0.32], [1046.5, 0.48], [783.99, 0.8], [1046.5, 0.96], [1318.5, 1.12]];
+    notes.forEach(([f, t]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle'; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, t0 + t); g.gain.exponentialRampToValueAtTime(0.25, t0 + t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t0 + t + 0.45);
+      o.start(t0 + t); o.stop(t0 + t + 0.5);
+    });
+  } catch (e) { /* sound is optional */ }
+}
+function celebrate(d, id) {
+  try { if (sessionStorage.getItem('celebrated-' + id)) return; sessionStorage.setItem('celebrated-' + id, '1'); } catch (e) { /* ignore */ }
+  const p = Math.round(d.percentage), top = p >= 90;
+  const first = esc((d.student_name || '').split(' ')[0]);
+  const bits = ['🎉', '🎊', '⭐', '🏆', '✨', '👏', '🌟'];
+  const confetti = Array.from({ length: 60 }, (_, i) => {
+    const left = Math.random() * 100, delay = Math.random() * 1.5, dur = 2.8 + Math.random() * 2.5;
+    return i % 3 === 0 ? `<i class="cf e" style="left:${left}%;animation-delay:${delay}s;animation-duration:${dur}s">${bits[i % bits.length]}</i>`
+      : `<i class="cf" style="left:${left}%;animation-delay:${delay}s;animation-duration:${dur}s;background:hsl(${Math.random() * 360},85%,60%)"></i>`;
+  }).join('');
+  const el = document.createElement('div');
+  el.className = 'celeb'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Congratulations');
+  el.innerHTML = `${confetti}<div class="celebbox"><div class="trophy">${top ? '🏆' : '🎉'}</div>
+    <h2>${top ? 'Outstanding!' : 'Congratulations!'} ${first}</h2>
+    <div class="ring"><b>${p}%</b></div>
+    <p>${top ? 'Brilliant work, you are among the top scorers! 🌟' : 'Great job! You scored well, keep it up! 👏'}</p>
+    <div class="emo">🎊 🥳 ⭐ 👏 🎉</div>
+    <div class="actions" style="justify-content:center"><button class="btn" id="celebOk">Continue</button><button class="btn ghost sm" id="celebSnd" title="Play sound">🔊</button></div></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.querySelector('#celebOk').onclick = close;
+  el.querySelector('#celebSnd').onclick = celebMusic;
+  el.addEventListener('click', (e) => { if (e.target === el) close(); });
+  celebMusic();
+  setTimeout(() => { document.querySelectorAll('.celeb .cf').forEach((c) => c.remove()); }, 8000);
 }
