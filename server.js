@@ -178,8 +178,25 @@ function mockGenerate({ text, topic, count, difficulty }) {
   return out.slice(0, count);
 }
 
-async function generateMCQs({ text, topic, subject, count, difficulty, avoid }) {
-  count = Math.max(1, Math.min(30, parseInt(count) || 10));
+const MAX_QUESTIONS = 50; // most questions faculty can generate at once
+async function generateMCQs(opts) {
+  const total = Math.max(1, Math.min(MAX_QUESTIONS, parseInt(opts.count) || 10));
+  const BATCH = 20; // big requests are made in smaller AI calls so the answer is never cut off
+  if (total <= BATCH || isMock()) return generateBatch({ ...opts, count: total });
+  let all = [], mode = 'gemini';
+  while (all.length < total) {
+    const need = Math.min(BATCH, total - all.length);
+    const r = await generateBatch({ ...opts, count: need, avoid: [...(opts.avoid || []), ...all.map((x) => x.question)].slice(-10) });
+    mode = r.mode;
+    const seen = new Set(all.map((x) => x.question.toLowerCase()));
+    const fresh = r.questions.filter((x) => !seen.has(x.question.toLowerCase()));
+    if (!fresh.length) break;
+    all = all.concat(fresh);
+  }
+  return { mode, questions: balanceAnswers(all.slice(0, total)) };
+}
+async function generateBatch({ text, topic, subject, count, difficulty, avoid }) {
+  count = Math.max(1, Math.min(MAX_QUESTIONS, parseInt(count) || 10));
   if (isMock()) {
     return { mode: 'mock', questions: balanceAnswers(mockGenerate({ text, topic, count, difficulty })) };
   }

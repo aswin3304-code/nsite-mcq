@@ -88,7 +88,7 @@ const FPAGES = {
         ${mats.map((m) => `<option value="${m.id}" data-subject="${esc(m.subject)}" data-topic="${esc(m.topic)}" data-dept="${m.department_id || ''}" ${String(draft.material_id) === String(m.id) ? 'selected' : ''}>${esc(m.filename || m.topic || 'Topic only')} - ${esc(m.subject)}</option>`).join('')}</select></label>
       <div class="row"><label class="f"><span>Subject</span><input name="subject" value="${esc(draft.subject)}" required></label>
       <label class="f"><span>Topic / chapter</span><input name="topic" value="${esc(draft.topic)}"></label></div>
-      <div class="row"><label class="f"><span>Number of questions (1-30)</span><input name="count" type="number" min="1" max="30" value="10" required></label>
+      <div class="row"><label class="f"><span>Number of questions</span><input name="count" type="number" min="1" max="50" value="10" required></label>
       <label class="f"><span>Difficulty</span><select name="difficulty"><option>Mixed</option><option>Easy</option><option selected>Medium</option><option>Hard</option></select></label></div>
       <label class="chk"><input type="checkbox" name="append"> Add to the questions below (otherwise the old list is replaced)</label>
       <button class="btn" id="genbtn">✨ Generate MCQs Using AI</button>
