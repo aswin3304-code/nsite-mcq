@@ -87,6 +87,8 @@ async function route() {
   try {
     if (!a || a === 'about' || a === 'features') return renderHome();
     if (a === 'login') return renderAuth(b, c);
+    if (a === 'forgot') return renderForgot(b);
+    if (a === 'reset') return renderReset(b);
     if (a === 'faculty') {
       if (!me || me.role === 'student') return go('login/faculty');
       return renderFaculty(b || 'overview');
@@ -108,8 +110,8 @@ function renderHome() {
     <h1>QUIZORA <span>AI</span></h1>
     <p>Smart AI-powered question generation and assessment for students and faculty.</p>
     <div class="cta">
-      <a class="btn big" href="#/login/student">🧑‍🎓 Student Login</a>
-      <a class="btn big alt" href="#/login/faculty">👩‍🏫 Faculty Login</a>
+      <a class="btn big" href="#/login/student">Student Login</a>
+      <a class="btn big alt" href="#/login/faculty">Faculty Login</a>
     </div>
   </section>`);
   window.scrollTo(0, 0);
@@ -134,9 +136,54 @@ async function renderAuth(role, mode) {
       <label class="f"><span>Password${reg ? ' (at least 8 characters)' : ''}</span><input name="password" type="password" required minlength="${reg ? 8 : 1}" autocomplete="${reg ? 'new-password' : 'current-password'}"></label>
       <button class="btn" style="width:100%" id="authbtn">${reg ? 'Create account' : 'Login'}</button>
     </form>
+    ${reg ? '' : `<p style="text-align:center;margin:14px 0 0"><a href="#/forgot/${role}">Forgot password?</a></p>`}
     <p style="text-align:center;margin:14px 0 0"><a href="#/">← Back</a></p>
   </div></div>`);
 }
+// ---------- forgot / reset password ----------
+function renderForgot(role) {
+  role = role === 'faculty' ? 'faculty' : 'student';
+  shell(`<div class="authwrap"><div class="card">
+    <h2>Forgot password</h2>
+    <p style="color:var(--mut)">Enter your registered email. We will send you a link to choose a new password.</p>
+    <form onsubmit="doForgot(event,'${role}')">
+      <label class="f"><span>Email address</span><input name="email" type="email" required autocomplete="email"></label>
+      <button class="btn" style="width:100%" id="fbtn">Send reset link</button>
+    </form>
+    <p style="text-align:center;margin:14px 0 0"><a href="#/login/${role}">← Back to login</a></p>
+  </div></div>`);
+}
+async function doForgot(e, role) {
+  e.preventDefault();
+  const email = new FormData(e.target).get('email');
+  const btn = document.getElementById('fbtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending…';
+  try {
+    await api('/auth/forgot', { method: 'POST', body: { email } });
+    document.querySelector('.authwrap .card').innerHTML = `<h2>Check your email 📧</h2><p style="color:var(--mut)">If that email is registered, a reset link has been sent. It works for 30 minutes. Also look in the Spam folder.</p><a class="btn" style="width:100%" href="#/login/${role}">Back to login</a>`;
+  } catch (err) { fail(err); btn.disabled = false; btn.textContent = 'Send reset link'; }
+}
+function renderReset(token) {
+  shell(`<div class="authwrap"><div class="card">
+    <h2>Choose a new password</h2>
+    <form onsubmit="doReset(event,'${esc(token || '')}')">
+      <label class="f"><span>New password (at least 8 characters)</span><input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label class="f"><span>Confirm new password</span><input name="again" type="password" required minlength="8" autocomplete="new-password"></label>
+      <button class="btn" style="width:100%" id="rbtn">Save new password</button>
+    </form>
+  </div></div>`);
+}
+async function doReset(e, token) {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  if (f.get('password') !== f.get('again')) return toast('The two passwords do not match.', 'err');
+  const btn = document.getElementById('rbtn'); btn.disabled = true;
+  try {
+    await api('/auth/reset', { method: 'POST', body: { token, password: f.get('password') } });
+    toast('Password changed. Please log in.', 'ok');
+    go('login/student');
+  } catch (err) { fail(err); btn.disabled = false; }
+}
+
 async function doAuth(e, role) {
   e.preventDefault();
   const f = Object.fromEntries(new FormData(e.target).entries());
